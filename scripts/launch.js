@@ -63,6 +63,12 @@ function printLoginHint() {
   console.log('============================================================');
 }
 
+function keepAlive() {
+  // 保活：宿主环境会回收"父进程已退出"的孤儿进程，导致 Chrome 启动几秒后闪退。
+  // 启动器进程必须保持运行，Chrome 才能存活。下载完成前请勿终止本进程。
+  setInterval(() => {}, 1 << 30);
+}
+
 async function main() {
   // 端口已被占用（已有远程调试浏览器在跑）→ 直接复用
   try {
@@ -82,11 +88,16 @@ async function main() {
   console.log('使用浏览器：', exe);
 
   const userData = path.join(os.tmpdir(), 'wechat-article-cdp');
+  // 每次启动前清空整个临时 profile：避免上次异常退出残留的锁文件/崩溃标记导致反复闪退
+  try { fs.rmSync(userData, { recursive: true, force: true }); } catch (e) {}
   const args = [
     `--remote-debugging-port=${PORT}`,
     `--user-data-dir=${userData}`,
     '--remote-allow-origins=*',
     '--no-first-run',
+    '--no-sandbox',
+    '--disable-gpu',
+    '--disable-dev-shm-usage',
     '--new-window',
     'https://mp.weixin.qq.com/'
   ];
@@ -106,6 +117,7 @@ async function main() {
       await httpGet(`http://127.0.0.1:${PORT}/json/version`);
       console.log('浏览器已启动，远程调试端口', PORT);
       printLoginHint();
+      keepAlive();
       return;
     } catch (e) {
       // 继续等待
