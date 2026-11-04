@@ -2,8 +2,10 @@
 name: 无双公众号文章下载
 displayName: 无双公众号文章下载
 slug: chuisoft-wechat-article-downloader
-version: 2.0.0
+version: 2.0.1
 author: 锤无双
+summary: 把你自己的微信公众号已发表内容批量备份到本地（HTML+Markdown 双格式），自动区分正式文章与贴图号图文分目录存放，各自生成查重索引；支持全量/增量/指定日期三种模式与「发表记录」双通道抓取。日期以文章页 #publish_time 为准，定时群发不再差一天。
+license: MIT
 description: 通过 Chrome DevTools Protocol 把微信公众号已发表内容批量下载到本地（HTML+Markdown
   双格式）。自动区分「正式文章」与「贴图号图文（系统二创）」分目录存放，各自生成查重索引。自动检测本机
   Chrome / Chromium 内核浏览器并启动远程调试，引导用户扫码登录自己的公众号后台，登录完成后才开始下载。支持首次全量、按上次时间自动增量、指定日期三种模式，并合并「发表记录」接口补齐"仅发布不群发"的文章。零额外依赖（仅浏览器

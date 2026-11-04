@@ -240,34 +240,35 @@ async function downloadOne(cdp, a, dirs) {
       title = jd.title || a.title;
       content = jd.content || '';
       account = jd.account || '微信公众号';
-      // 「发表记录」来源的文章无 date，从文章页 #publish_time 回填。
+      // 日期一律以文章页 #publish_time 为准（真实发表时间）：
+      // 定时群发时列表接口 create_time 记的是定时操作时间，可能比实际发表早一天（2026-11-04 教训）。
       // 页面时间可能是：绝对("2026年10月04日 08:00")、无年份("10月09日")、相对("今天 08:00"/"昨天"/"前天"/"3天前")。
-      if (!a.date) {
+      {
         const now = new Date();
         const pt = jd.ptime || '';
         const fmt = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        let parsed = null;
         let pm = /(\d{4})年(\d{1,2})月(\d{1,2})日/.exec(pt);
         if (pm) {
-          a.date = `${pm[1]}-${pad(parseInt(pm[2], 10))}-${pad(parseInt(pm[3], 10))}`;
+          parsed = `${pm[1]}-${pad(parseInt(pm[2], 10))}-${pad(parseInt(pm[3], 10))}`;
         } else if (/^今天/.test(pt)) {
-          a.date = fmt(now);
+          parsed = fmt(now);
         } else if (/^昨天/.test(pt)) {
-          a.date = fmt(new Date(now.getTime() - 86400000));
+          parsed = fmt(new Date(now.getTime() - 86400000));
         } else if (/^前天/.test(pt)) {
-          a.date = fmt(new Date(now.getTime() - 2 * 86400000));
+          parsed = fmt(new Date(now.getTime() - 2 * 86400000));
         } else if ((pm = /(\d+)天前/.exec(pt))) {
-          a.date = fmt(new Date(now.getTime() - parseInt(pm[1], 10) * 86400000));
+          parsed = fmt(new Date(now.getTime() - parseInt(pm[1], 10) * 86400000));
         } else {
           const pm2 = /(\d{1,2})月(\d{1,2})日/.exec(pt);
           if (pm2) {
             let y = now.getFullYear();
             const d = new Date(y, parseInt(pm2[1], 10) - 1, parseInt(pm2[2], 10));
             if (d > now) y -= 1;
-            a.date = `${y}-${pad(parseInt(pm2[1], 10))}-${pad(parseInt(pm2[2], 10))}`;
-          } else {
-            a.date = fmtDate(now);
+            parsed = `${y}-${pad(parseInt(pm2[1], 10))}-${pad(parseInt(pm2[2], 10))}`;
           }
         }
+        if (parsed) a.date = parsed; // 解析成功即覆盖（无论来源是群发还是发表记录）
       }
       if (content) break;
     } catch (e) {
@@ -282,6 +283,16 @@ async function downloadOne(cdp, a, dirs) {
 
   const realBase = `${a.date}_${sanitize(title)}`;
   if (fs.existsSync(path.join(targetDir, `${realBase}.md`))) return 'exists';
+
+  // 运行时查重：同标题（任意日期）已在任一目录存在 → 视为已备份。
+  // 场景：同一次运行中群发版本（日期A）先落盘，「发表记录」候选（日期回填可能差一天）后到，
+  // 候选过滤在下载前算好、看不到新文件，必须在这里兜底（2026-11-04 教训，一次运行产生26对差一天重复）。
+  const safeCand = a.safe, safePage = sanitize(title);
+  const anyDup = [dirs.article, dirs.tuitu].some((d) => {
+    if (!fs.existsSync(d)) return false;
+    return fs.readdirSync(d).some((n) => n.endsWith(`_${safeCand}.md`) || (safePage !== safeCand && n.endsWith(`_${safePage}.md`)));
+  });
+  if (anyDup) return 'exists';
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{max-width:680px;margin:0 auto;padding:10px;font-family:-apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif;line-height:1.8;color:#333}img{max-width:100%;height:auto}</style></head><body><h1>${escapeHtml(title)}</h1><div class="meta">${escapeHtml(account)} · ${a.date}</div>${content}</body></html>`;
   fs.writeFileSync(path.join(targetDir, `${realBase}.html`), html, 'utf8');
